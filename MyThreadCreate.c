@@ -8,77 +8,82 @@
 #define TH_RUNNING 2
 #define TH_BLOCKED 3
 
-struct thread_ready_queue{
-	struct thread_read_queue *next;
-	int status;
-	ucontext_t context;
+struct thread{
+	struct thread *next;
+	ucontext_t *context;
+	struct thread *parent;
 };
 
-thread_read_queue *head = NULL;
+struct thread *ready_queue_head = NULL;
+struct thread *running_thread;
+struct thread *temp;
+ucontext_t current_context;
 typedef void *MyThread;
 
 
 
 MyThread MyThreadCreate (void (*start_funct)(void *), void *args){
 
-	ucontext_t new_context, calling_context;
+	ucontext_t new_context;
 	char stack[STACK_SIZE];
 
-	getcontext(new_context);
+	getcontext(&new_context);
 
-
-	new_context.uc_link				= &calling_context;
+	new_context.uc_link				= &current_context;
 	new_context.uc_stack.ss_sp		= stack;
 	new_context.uc_stack.ss_size	= sizeof(stack);
 
-	makecontext(&new_context, (void *(void))start_funct, 1, args);
-	getcontext(calling_context);
+	makecontext(&new_context, (void (*)(void))start_funct, 1, args);
+	getcontext(&current_context);
 	
-	stuct thread_ready_queue new_node, temp;
-
-	temp = head;
+	temp = ready_queue_head;
 
 	while(temp->next != NULL) temp = temp->next;
 
-	new_node = malloc(sizeof(struct thread_ready_queue));
-	new_node->next 		= NULL;
-	new_node->context 	= &new_context;
-	new_node->status 	= TH_READY;
+	temp->next = malloc(sizeof(struct thread));
+	temp->next->next 	= NULL;
+	temp->next->context = &new_context;
+	temp->next->parent	= running_thread;
 
-	temp->next = new_node;
-
+	
 }
 
 
-void MyThreadInit(void*(start_funct)(void*), void *args){
+void MyThreadInit(void(*start_funct)(void*), void *args){
 
-	ucontext_t new_context, calling_context;
+	ucontext_t new_context;
 	char stack[STACK_SIZE];
 
-	getcontext(new_context);
+	getcontext(&new_context);
 
 
-	new_context.uc_link				= &calling_context;
+	new_context.uc_link				= &current_context;
 	new_context.uc_stack.ss_sp		= stack;
 	new_context.uc_stack.ss_size	= sizeof(stack);
 
-	makecontext(&new_context, (void *(void))start_funct, 1, args);
+	makecontext(&new_context, (void (*)(void))start_funct, 1, args);
 	
+	running_thread = malloc(sizeof(struct thread));
+	running_thread->next 	= NULL;
+	running_thread->context = &new_context;
+	running_thread->parent  = NULL;
 
-	head = malloc(sizeof(struct thread_ready_queue));
-	head->next 		= NULL;
-	head->context 	= &new_context;
-	head->status 	= TH_RUNNING;
-	swapcontext (&calling_context, &new_context);
-
-}
-
-void MyThreadJoinAll(){
+	running_thread = temp;
+	
+	swapcontext (&current_context, &new_context);
 
 }
+int i=0;
+void test_func(void *x){
+	
+	printf("%d :in test funtion\n");
+	MyThreadCreate()
 
+}
 
 int main(){
-	MyThread new_thread;
+	//MyThread new_thread;
+	int n = 10;
+	MyThreadInit(test_func, (void *)&n);
 
 }
