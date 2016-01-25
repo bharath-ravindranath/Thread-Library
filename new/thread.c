@@ -5,10 +5,15 @@
 
 #define STACK_SIZE 8192
 
+#define TH_READY 1
+#define TH_RUNNING 2
+#define TH_BLOCKED 3
+
 struct thread_node{
 	struct thread_node *next;
 	ucontext_t context;
 	struct thread_node *parent;
+	int status;
 };
 struct thread_node *ready_queue_head = NULL;
 struct thread_node *running_thread;
@@ -25,7 +30,10 @@ void fifo_scheduler(){
 		ready_queue_head = ready_queue_head->next;
 		temp->next = NULL;
 		running_thread = temp;
-		swapcontext(&unix_context,&(temp->context));
+		running_thread->status = TH_RUNNING;
+		swapcontext(&unix_context,&(running_thread->context));
+		if(running_thread != NULL) printf("you have to exit the thread\n");
+
 	}
 }
 
@@ -59,6 +67,7 @@ MyThread MyThreadCreate (void (*start_funct)(void *), void *args){
 	temp->context.uc_stack.ss_sp	= malloc(STACK_SIZE);
 	temp->context.uc_stack.ss_size	= STACK_SIZE;
 	temp->next = NULL;
+	temp->status = TH_READY;
 	makecontext(&(temp->context), (void (*)(void))start_funct, 1, args);
 	
 	if(ready_queue_head == NULL) ready_queue_head = temp;
@@ -79,7 +88,20 @@ void MyThreadYield(void){
 	temp1 = ready_queue_head;
 	while(temp1->next != NULL) temp1 = temp1->next;
 	temp1->next = running_thread;
-	swapcontext(&(running_thread->context),&unix_context);
+	running_thread = NULL;
+	swapcontext(&(temp1->next->context),&unix_context);
+}
+
+void MyThreadExit(void){
+	//ucontext_t to_destroy;
+	//swapcontext(&to_destroy,unix_context);
+	ucontext_t temp2 = running_thread->context;
+	running_thread = NULL;
+	swapcontext(&temp2,&unix_context);
+}
+
+void MyThreadJoin(MyThread thread){
+	
 }
 
 void test_func3(void *x){
@@ -92,6 +114,7 @@ void test_func2(void *x){
 	
 	MyThreadYield();
 	printf("after the test funtion 2\n");
+	MyThreadExit();
 }
 
 void test_func(void *x){
@@ -101,8 +124,11 @@ void test_func(void *x){
 	printf("In test funtion\n");
 	thread1 = MyThreadCreate(test_func2,(void *)&a);
 	thread2 = MyThreadCreate(test_func3,(void *)&a);
+	printf("after thread creation\n");
 	MyThreadYield();
 	printf("after the test funtion\n");
+	MyThreadExit();
+
 
 }
 
@@ -110,5 +136,6 @@ int main(){
 	//MyThread new_thread;
 	int n = 10;
 	MyThreadInit(test_func, (void *)&n);
+	printf("Back in main\n");
 
 }
