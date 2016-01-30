@@ -3,14 +3,13 @@
 #include<ucontext.h>
 #include "mythread.h"
 
-#define STACK_SIZE 8192
+#define STACK_SIZE 8192 //Stack Size
 
+/* %% Below variables define whether the thread is in blocked queue and why the thread is in blocked queue %*/
 #define NOT_WAITING 0
 #define WAIT_ON_JOIN 1
 #define WAIT_ON_JOIN_ALL 2
 
-#define TH_ALIVE 1
-#define TH_FINISHED 2
 
 struct thread_node{
 	struct thread_node *next;
@@ -49,7 +48,7 @@ void add_to_block_queue(struct thread_node *node){
 }
 
 void move_from_blocked_to_ready(struct thread_node *node){
-	struct thread_node *bl_temp1,*bl_temp2;
+	struct thread_node *bl_temp1;
 
 	node->wait_status = NOT_WAITING;
 	node->waiting_on_thread = NULL;
@@ -67,7 +66,6 @@ void move_from_blocked_to_ready(struct thread_node *node){
 
 void fifo_scheduler(){
 
-	struct thread_node *temp;
 	while(ready_queue_head != NULL){
 		running_thread = ready_queue_head;
 		ready_queue_head = ready_queue_head->next;
@@ -149,9 +147,7 @@ int is_no_child_alive(struct thread_node *node){
 	return 0;
 }
 void MyThreadExit(void){
-	//ucontext_t to_destroy;
-	//swapcontext(&to_destroy,unix_context);
-	struct thread_node *temp1,*bl_temp1,*bl_temp2;
+
 	ucontext_t temp2 = running_thread->context;
 	 if (((running_thread->parent)->wait_status == WAIT_ON_JOIN) && ((running_thread->parent)->waiting_on_thread == running_thread)){
 		move_from_blocked_to_ready(running_thread->parent);
@@ -169,7 +165,6 @@ int MyThreadJoin(MyThread thread){
 
 	struct thread_node *temp1, *temp2;
 	temp = (struct thread_node *)thread;
-	int n;
 
 	temp1 = ready_queue_head;
 	temp2 = blocked_queue_head;
