@@ -196,7 +196,7 @@ int MyThreadJoin(MyThread thread){
 	temp2 = blocked_queue_head;
 	while(temp1 != NULL && temp1 != temp) temp1 = temp1->next;
 	while(temp2 != NULL && temp2 != temp) temp2 = temp2->next;
-	if(temp1 == NULL && temp2 == NULL){
+	if(is_terminated(temp)){
 		printf("Child already terminated\n");
 	}
 
