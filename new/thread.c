@@ -26,10 +26,9 @@ void fifo_scheduler(){
 
 	struct thread_node *temp;
 	while(ready_queue_head != NULL){
-		temp = ready_queue_head;
+		running_thread = ready_queue_head;
 		ready_queue_head = ready_queue_head->next;
-		temp->next = NULL;
-		running_thread = temp;
+		running_thread->next = NULL;
 		swapcontext(&unix_context,&(running_thread->context));
 		if(running_thread != NULL) printf("you have to exit the thread\n");
 
@@ -97,10 +96,21 @@ void MyThreadYield(void){
 void MyThreadExit(void){
 	//ucontext_t to_destroy;
 	//swapcontext(&to_destroy,unix_context);
-	struct thread_node *temp1;
+	struct thread_node *temp1,*bl_temp1,*bl_temp2;
 	ucontext_t temp2 = running_thread->context;
-	if ((running_thread->parent->wait_status == WAIT_ON_JOIN) && (running_thread->parent->waiting_on_thread == running_thread)){
-		running_thread->parent->wait_status = NOT_WAITING;
+	 if (running_thread->parent != NULL && (running_thread->parent->wait_status == WAIT_ON_JOIN) && ((running_thread->parent)->waiting_on_thread == running_thread)){
+		(running_thread->parent)->wait_status = NOT_WAITING;
+		bl_temp1 = blocked_queue_head;
+		bl_temp2 = blocked_queue_head;
+		while(bl_temp1->next != NULL && bl_temp1 != running_thread->parent){
+			bl_temp2 = bl_temp1;
+			bl_temp1 = bl_temp1->next;
+		}
+		if(bl_temp2 == bl_temp1) blocked_queue_head = NULL;
+		else{
+			bl_temp2->next = bl_temp1->next;
+		}
+
 		if(ready_queue_head == NULL) ready_queue_head = running_thread->parent;
 		else {
 			temp1 = ready_queue_head;
@@ -108,7 +118,7 @@ void MyThreadExit(void){
 			temp1->next = running_thread->parent;
 		}
 	}
-	else if(running_thread->parent->wait_status == WAIT_ON_JOIN_ALL){
+	else if( running_thread->parent != NULL && running_thread->parent->wait_status == WAIT_ON_JOIN_ALL){
 		temp1 = ready_queue_head;
 		while(temp1 != NULL && temp1->parent != running_thread->parent ) temp1 = temp1->next;
 		if(temp1 == NULL){
@@ -124,7 +134,6 @@ void MyThreadExit(void){
 				}
 			}
 		}
-
 	}
 	free(running_thread);
 	running_thread = NULL;
@@ -133,15 +142,19 @@ void MyThreadExit(void){
 
 int MyThreadJoin(MyThread thread){
 
-	struct thread_node *temp1;
+	struct thread_node *temp1, *temp2;
 	temp = (struct thread_node *)thread;
+	int n;
 
-	
-	if(temp == NULL){
-		printf("Thread alread finished execution or thread does not exist\n");
+	temp1 = ready_queue_head;
+	temp2 = blocked_queue_head;
+	while(temp1 != NULL && temp1 != temp) temp1 = temp1->next;
+	while(temp2 != NULL && temp2 != temp) temp2 = temp2->next;
+	if(temp1 == NULL && temp2 == NULL){
+		printf("Child already terminated\n");
 	}
 
-	else if(temp->parent != running_thread){
+	else if(temp != NULL && temp->parent != running_thread){
 		printf("Can only join your own child\n");
 	}
 	else{
@@ -151,9 +164,10 @@ int MyThreadJoin(MyThread thread){
 			while(temp1->next != NULL) temp1 = temp1->next;
 			temp1->next = running_thread;
 		}
-		temp1 = running_thread;
+		temp1 						= running_thread;
 		temp1->wait_status 			= WAIT_ON_JOIN;
 		temp1->waiting_on_thread 	= temp;
+		temp1->next = NULL;
 		running_thread = NULL;
 		swapcontext(&(temp1->context),&unix_context);
 		return 0;
@@ -182,37 +196,36 @@ void MyThreadJoinAll(void){
 		}
 	}
 }
+int mode = 0;
 
-void test_func3(void *x){
-	printf("In funtion 3\n");
+void t0(void * n)
+{
+  MyThread T;
+
+  int n1 = (int)n; 
+  printf("t0 start %d\n", n1);
+
+  int n2 = n1 -1 ;
+  if (n1 > 0) {
+    printf("t0 create\n");
+    T = MyThreadCreate(t0, (void *)n2);
+    if (mode == 1)
+      MyThreadYield();
+    else if (mode == 2)
+      MyThreadJoin(T);
+  }
+  printf("t0 end\n");
+  MyThreadExit();
 }
 
-void test_func2(void *x){
-	//MyThread thread1;
-	int a=10;
-	printf("In test funtion 2\n");
-	
-	MyThreadYield();
-	printf("after the test funtion 2\n");
-	MyThreadExit();
-}
-
-void test_func(void *x){
-	
-	MyThread thread1,thread2;
-	int a=10;
-	printf("In test funtion\n");
-	thread1 = MyThreadCreate(test_func2,(void *)&a);
-	thread2 = MyThreadCreate(test_func3,(void *)&a);
-	printf("after thread creation\n");
-	MyThreadYield();
-	printf("after the test funtion\n");
-	MyThreadExit();
-}
-
-int main(){
-	//MyThread new_thread;
-	int n = 10;
-	MyThreadInit(test_func, (void *)&n);
-	printf("Back in main\n");
+int main(int argc, char *argv[])
+{
+  int count; 
+  
+  if (argc < 2 || argc > 3)
+    return -1;
+  count = atoi(argv[1]);
+  if (argc == 3)
+    mode = atoi(argv[2]);
+  MyThreadInit(t0, (void *)count);
 }
