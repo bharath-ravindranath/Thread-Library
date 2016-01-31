@@ -71,7 +71,7 @@ void fifo_scheduler(){
 		ready_queue_head = ready_queue_head->next;
 		running_thread->next = NULL;
 		swapcontext(&unix_context->context,&(running_thread->context));
-		if(running_thread != NULL) printf("you have to exit the thread\n");
+		if(running_thread != NULL)  return ;
 
 	}
 }
@@ -171,11 +171,13 @@ int MyThreadJoin(MyThread thread){
 	while(temp1 != NULL && temp1 != temp) temp1 = temp1->next;
 	while(temp2 != NULL && temp2 != temp) temp2 = temp2->next;
 	if(temp1 == NULL && temp2 == NULL){
-		printf("Child already terminated\n");
+		//printf("Child already terminated\n");
+		return 0;
 	}
 
 	else if(temp != NULL && temp->parent != running_thread){
-		printf("Can only join your own child\n");
+		//printf("Can only join your own child\n");
+		return -1;
 	}
 	else{
 		temp1 						= running_thread;
@@ -186,7 +188,6 @@ int MyThreadJoin(MyThread thread){
 		swapcontext(&(temp1->context),&(unix_context->context));
 		return 0;
 	}
-	return -1;
 }
 
 void MyThreadJoinAll(void){
@@ -201,5 +202,71 @@ void MyThreadJoinAll(void){
 	}
 }
 
+struct thread_list{
+	Thread thread;
+	struct thread_list *next;
+};
+struct semaphore
+{
+	int initialValue;
+	int semValue;
+	struct thread_list *list;
+};
 
-stdlib
+MySemaphore MySemaphoreInit(int initialValue){
+	struct semaphore *sem = malloc(sizeof(struct semaphore *));
+	sem->initialValue = initialValue;
+	sem->semValue = initialValue;
+	sem->list = NULL;
+	return (MySemaphore)sem;
+}
+
+void MySemaphoreSignal(MySemaphore sem){
+	struct semaphore *temp = (struct semaphore *)sem;
+	Thread temp1;
+	struct thread_list *temp2;
+	temp->semValue--;
+	if(temp->semValue < 0){
+		//add this to tail of Thread list
+		if(temp->list == NULL) {
+			temp->list->thread = running_thread;
+			temp->list->next = NULL;
+		}
+		else{
+			temp2 = temp->list;
+			while(temp2->next != NULL) temp2 = temp2->next;
+			(temp2->next)->thread = running_thread;
+			(temp2->next)->next = NULL;
+		}
+		//block this thread	
+		add_to_block_queue(running_thread);
+		temp1 = running_thread;
+		running_thread = NULL;
+		swapcontext(&temp1->context, &unix_context->context);
+	} 
+
+}
+
+void MySemaphoreWait(MySemaphore sem){
+	struct semaphore *temp = (struct semaphore *)sem;
+	Thread temp1;
+	temp->semValue++;
+	if(temp->semValue <= 0){
+		//remove head of Thread of list
+		temp1 = (temp->list)->thread;
+		temp->list = (temp->list)->next;
+		//move this thread to ready_queue
+		move_from_blocked_to_ready(temp1);
+	}
+}
+
+int MySemaphoreDestroy(MySemaphore sem){
+	struct semaphore *temp = (struct semaphore *)sem;
+	if(temp->initialValue != temp->semValue){
+		printf("Some threads are using the semaphore\n");
+		return -1;
+	}
+	free(temp);
+	return 0;
+
+}
