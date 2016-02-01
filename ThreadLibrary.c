@@ -221,22 +221,21 @@ MySemaphore MySemaphoreInit(int initialValue){
 	return (MySemaphore)sem;
 }
 
-void MySemaphoreSignal(MySemaphore sem){
+void MySemaphoreWait(MySemaphore sem){
 	struct semaphore *temp = (struct semaphore *)sem;
 	Thread temp1;
-	struct thread_list *temp2;
+	struct thread_list *temp2 = malloc(sizeof(struct semaphore *));
+	struct thread_list *temp3;
 	temp->semValue--;
 	if(temp->semValue < 0){
 		//add this to tail of Thread list
-		if(temp->list == NULL) {
-			temp->list->thread = running_thread;
-			temp->list->next = NULL;
-		}
+		temp2->thread = running_thread;
+		temp2->next = NULL;
+		if(temp->list == NULL) temp->list = temp2;
 		else{
-			temp2 = temp->list;
-			while(temp2->next != NULL) temp2 = temp2->next;
-			(temp2->next)->thread = running_thread;
-			(temp2->next)->next = NULL;
+			temp3 = temp->list;
+			while(temp3->next != NULL) temp3 = temp3->next;
+			temp3->next = temp2;
 		}
 		//block this thread	
 		add_to_block_queue(running_thread);
@@ -247,7 +246,7 @@ void MySemaphoreSignal(MySemaphore sem){
 
 }
 
-void MySemaphoreWait(MySemaphore sem){
+void MySemaphoreSignal(MySemaphore sem){
 	struct semaphore *temp = (struct semaphore *)sem;
 	Thread temp1;
 	temp->semValue++;
@@ -262,8 +261,12 @@ void MySemaphoreWait(MySemaphore sem){
 
 int MySemaphoreDestroy(MySemaphore sem){
 	struct semaphore *temp = (struct semaphore *)sem;
-	if(temp->initialValue != temp->semValue){
-		printf("Some threads are using the semaphore\n");
+	if(temp == NULL){
+		// printf("Not a valid MySemaphore\n");
+		return -1;
+	}
+	else if(temp->initialValue != temp->semValue){
+		//printf("Some threads are using the semaphore\n");
 		return -1;
 	}
 	free(temp);
