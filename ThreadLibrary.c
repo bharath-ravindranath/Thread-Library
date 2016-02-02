@@ -123,7 +123,7 @@ void MyThreadInit(void(*start_funct)(void*), void *args){
 	ready_queue_head->context.uc_stack.ss_size	= STACK_SIZE;
 
 	makecontext(&(ready_queue_head->context), (void (*)(void))start_funct, 1, args);
-
+	already_initiated = 1;
 	fifo_scheduler();
 }
 
