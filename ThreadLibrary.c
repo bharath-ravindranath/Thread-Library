@@ -1,6 +1,8 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<ucontext.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ucontext.h>
+#include <syslog.h>
+
 #include "mythread.h"
 
 #define STACK_SIZE 8192 //Stack Size
@@ -10,7 +12,7 @@
 #define WAIT_ON_JOIN 1
 #define WAIT_ON_JOIN_ALL 2
 
-
+/*Structures and Variables for Thread*/
 struct thread_node{
 	struct thread_node *next;
 	ucontext_t context;
@@ -24,6 +26,19 @@ Thread ready_queue_head = NULL, blocked_queue_head = NULL;
 Thread running_thread;
 Thread temp;
 Thread unix_context;
+
+int already_initiated = 0;
+
+/*structures and variables for Semaphores*/
+struct thread_list{
+	Thread thread;
+	struct thread_list *next;
+};
+struct semaphore
+{
+	int initialValue;
+	struct thread_list *list;
+};
 
 void add_to_ready_queue(Thread node){
 
@@ -71,16 +86,29 @@ void fifo_scheduler(){
 		ready_queue_head = ready_queue_head->next;
 		running_thread->next = NULL;
 		swapcontext(&unix_context->context,&(running_thread->context));
-		if(running_thread != NULL)  return ;
-
+		if(running_thread != NULL) {
+			syslog(LOG_INFO, "You should exit a thread with MyThreadExit()");
+			return;
+		}
 	}
 }
 
 void MyThreadInit(void(*start_funct)(void*), void *args){
 
-
+	if(already_initiated == 1) {
+		syslog(LOG_INFO, "ThreadInit: Can only invoke \"MyThreadInit\" once\n");
+		return;
+	}
 	ready_queue_head 					= malloc(sizeof(struct thread_node));
+	if(ready_queue_head == NULL){
+		syslog(LOG_INFO, "ThreadInit: Memory error: Could not create thread");
+		return;
+	}
 	unix_context						= malloc(sizeof(struct thread_node));
+	if(unix_context == NULL){
+		syslog(LOG_INFO, "ThreadInit: Memory error during thread Initiation");
+		return;
+	}
 	ready_queue_head->next 				= NULL;
 	unix_context->next					= NULL;
 	ready_queue_head->parent  			= unix_context;
@@ -95,13 +123,22 @@ void MyThreadInit(void(*start_funct)(void*), void *args){
 	ready_queue_head->context.uc_stack.ss_size	= STACK_SIZE;
 
 	makecontext(&(ready_queue_head->context), (void (*)(void))start_funct, 1, args);
+
 	fifo_scheduler();
 }
 
 MyThread MyThreadCreate (void (*start_funct)(void *), void *args){
 
+	if(!already_initiated){
+		syslog(LOG_INFO, "ThreadCreate: You have to initiate the thread using MyThreadInit()\n");
+		return NULL;
+	}
 	Thread temp1;
 	temp 					= malloc(sizeof(struct thread_node));
+	if(temp == NULL){
+		syslog(LOG_INFO, "ThreadCreate: Memory error: Could not create thread");
+		return;
+	}
 	temp->next 				= NULL;
 	temp->parent 			= running_thread;
 	temp->wait_status		= NOT_WAITING;
@@ -126,6 +163,11 @@ MyThread MyThreadCreate (void (*start_funct)(void *), void *args){
 
 void MyThreadYield(void){
 
+	if(!already_initiated){
+		syslog(LOG_INFO, "ThreadYield: You have to initiate the thread using MyThreadInit()\n");
+		return;
+	}
+
 	Thread temp1;
 	
 	temp1 = ready_queue_head;
@@ -148,6 +190,11 @@ int is_no_child_alive(Thread node){
 }
 void MyThreadExit(void){
 
+	if(!already_initiated){
+		syslog(LOG_INFO, "ThreadExit: You have to initiate the thread using MyThreadInit()\n");
+		return ;
+	}
+
 	ucontext_t temp2 = running_thread->context;
 	 if (((running_thread->parent)->wait_status == WAIT_ON_JOIN) && ((running_thread->parent)->waiting_on_thread == running_thread)){
 		move_from_blocked_to_ready(running_thread->parent);
@@ -158,10 +205,16 @@ void MyThreadExit(void){
 	free(running_thread);
 	running_thread = NULL;
 	swapcontext(&temp2,&unix_context->context);
+	
 
 }
 
 int MyThreadJoin(MyThread thread){
+
+	if(!already_initiated){
+		syslog(LOG_INFO, "ThreadJoin: You have to initiate the thread using MyThreadInit()\n");
+		return -1;
+	}
 
 	Thread temp1,temp2;
 	temp = (Thread )thread;
@@ -171,12 +224,12 @@ int MyThreadJoin(MyThread thread){
 	while(temp1 != NULL && temp1 != temp) temp1 = temp1->next;
 	while(temp2 != NULL && temp2 != temp) temp2 = temp2->next;
 	if(temp1 == NULL && temp2 == NULL){
-		//printf("Child already terminated\n");
+		syslog(LOG_INFO, "ThreadJoin: Child already terminated\n");
 		return 0;
 	}
 
 	else if(temp != NULL && temp->parent != running_thread){
-		//printf("Can only join your own child\n");
+		syslog(LOG_INFO, "ThreadJoin: Can only join your own child\n");
 		return -1;
 	}
 	else{
@@ -191,6 +244,12 @@ int MyThreadJoin(MyThread thread){
 }
 
 void MyThreadJoinAll(void){
+	
+	if(!already_initiated){
+		syslog(LOG_INFO, "ThreadJoinAll: You have to initiate the thread using MyThreadInit()\n");
+		return ;
+	}
+
 	Thread temp1;
 
 	if(!is_no_child_alive(running_thread)){
@@ -202,21 +261,13 @@ void MyThreadJoinAll(void){
 	}
 }
 
-struct thread_list{
-	Thread thread;
-	struct thread_list *next;
-};
-struct semaphore
-{
-	int initialValue;
-	int semValue;
-	struct thread_list *list;
-};
-
 MySemaphore MySemaphoreInit(int initialValue){
 	struct semaphore *sem = malloc(sizeof(struct semaphore *));
+	if(sem == NULL){
+		syslog(LOG_INFO, "SemaphoreInit: Memory error: Could not create thread");
+		return;
+	}
 	sem->initialValue = initialValue;
-	sem->semValue = initialValue;
 	sem->list = NULL;
 	return (MySemaphore)sem;
 }
@@ -225,10 +276,11 @@ void MySemaphoreWait(MySemaphore sem){
 	struct semaphore *temp = (struct semaphore *)sem;
 	Thread temp1;
 	struct thread_list *temp2 = malloc(sizeof(struct semaphore *));
+	
 	struct thread_list *temp3;
-	temp->semValue--;
-	if(temp->semValue < 0){
-		//add this to tail of Thread list
+	temp->initialValue--;
+	if(temp->initialValue < 0){
+		
 		temp2->thread = running_thread;
 		temp2->next = NULL;
 		if(temp->list == NULL) temp->list = temp2;
@@ -237,7 +289,7 @@ void MySemaphoreWait(MySemaphore sem){
 			while(temp3->next != NULL) temp3 = temp3->next;
 			temp3->next = temp2;
 		}
-		//block this thread	
+		
 		add_to_block_queue(running_thread);
 		temp1 = running_thread;
 		running_thread = NULL;
@@ -249,12 +301,12 @@ void MySemaphoreWait(MySemaphore sem){
 void MySemaphoreSignal(MySemaphore sem){
 	struct semaphore *temp = (struct semaphore *)sem;
 	Thread temp1;
-	temp->semValue++;
-	if(temp->semValue <= 0){
-		//remove head of Thread of list
+	temp->initialValue++;
+	if(temp->initialValue <= 0){
+		
 		temp1 = (temp->list)->thread;
 		temp->list = (temp->list)->next;
-		//move this thread to ready_queue
+		
 		move_from_blocked_to_ready(temp1);
 	}
 }
@@ -262,11 +314,11 @@ void MySemaphoreSignal(MySemaphore sem){
 int MySemaphoreDestroy(MySemaphore sem){
 	struct semaphore *temp = (struct semaphore *)sem;
 	if(temp == NULL){
-		// printf("Not a valid MySemaphore\n");
+		syslog(LOG_INFO, "SemaphoreDestroy: Not a valid MySemaphore\n");
 		return -1;
 	}
-	else if(temp->initialValue != temp->semValue){
-		//printf("Some threads are using the semaphore\n");
+	else if(temp->initialValue < 0){
+		syslog(LOG_INFO, "SemaphoreDestroy: Some threads are using the semaphore\n");
 		return -1;
 	}
 	free(temp);
