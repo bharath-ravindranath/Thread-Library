@@ -1,4 +1,4 @@
-Description:
+#Description
 
 Implement a non pre-emptive user-level threads library mythread.a with the following routines.
 Thread routines.
@@ -44,14 +44,14 @@ Turn In:
 Be sure to turnin all the files needed. Include a Makefile that creates a library (a ".a" file) called mythread.a. An appropriate penalty will be assessed if this is not so.
 Also, denote any resources used--including other students--in a file named REFERENCES.
 
-Resources:
+#Resources
 
 Here is the header file for the library. This file is the de facto interface for the library. Do not edit it.
 Additionally, here is a program that uses the library. The program comes with no warranty at all. It is provided as an illustration only.
 
 Some slides describing the assignment.
 
-Testing:
+#Testing
 
 This assignment will be compiled and tested on a VCL Linux machine.
 Notes:
@@ -64,7 +64,7 @@ The code will be tested on the VCL image named here.
 Grading:
 
 The weighting of this assignment is given in policies.
-Extra Credit
+#Extra Credit
 
 Extra credit of 5% is available. Two restrictions were designed into the assignment to keep it simple: (1) Each thread must end in MyThreadExit and (2) The initial "UNIX" process context is not used as a thread context. To receive the extra credit, students must provide the following work-arounds to those restrictions. Specifically, the library must do the following.
 Work correctly when threads do not end with MyThreadExit.
